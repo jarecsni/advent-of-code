@@ -34,3 +34,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Temporary task files
+TASKS.md
