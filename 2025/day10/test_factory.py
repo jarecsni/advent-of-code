@@ -4,7 +4,7 @@ Tests for Day 10: Factory solution
 """
 
 import pytest
-from factory import parse_machine, solve_gf2_system, solve_factory
+from factory import parse_machine, solve_gf2_system, part1, parse_input
 
 
 def test_parse_machine():
@@ -45,7 +45,8 @@ def test_solve_gf2_system_example3():
 
 def test_solve_factory_example():
     """Test complete example solution."""
-    result = solve_factory('example.txt')
+    data = parse_input('example.txt')
+    result = part1(data)
     assert result == 7
 
 

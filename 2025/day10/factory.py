@@ -39,6 +39,131 @@ def parse_machine(line: str) -> Tuple[List[int], List[List[int]]]:
     return target_state, buttons
 
 
+def solve_gf2_gaussian(target: List[int], buttons: List[List[int]], debug: bool = False) -> int:
+    """
+    Solve using Gaussian elimination over GF(2).
+    
+    This is much faster for large systems but finds A solution, not necessarily 
+    the minimum weight solution. For minimum weight, you'd need to enumerate
+    the null space and find the minimum among all solutions.
+    """
+    num_lights = len(target)
+    num_buttons = len(buttons)
+    
+    if num_buttons == 0:
+        return float('inf') if any(target) else 0
+    
+    # Create augmented matrix [A|b]
+    augmented = np.zeros((num_lights, num_buttons + 1), dtype=int)
+    
+    # Fill coefficient matrix
+    for button_idx, button_lights in enumerate(buttons):
+        for light_idx in button_lights:
+            if light_idx < num_lights:
+                augmented[light_idx, button_idx] = 1
+    
+    # Fill target vector
+    for i, val in enumerate(target):
+        augmented[i, num_buttons] = val
+    
+    if debug:
+        print("Initial augmented matrix:")
+        print(augmented)
+    
+    # Gaussian elimination in GF(2)
+    pivot_row = 0
+    for col in range(num_buttons):
+        # Find pivot
+        pivot_found = False
+        for row in range(pivot_row, num_lights):
+            if augmented[row, col] == 1:
+                # Swap rows if needed
+                if row != pivot_row:
+                    augmented[[pivot_row, row]] = augmented[[row, pivot_row]]
+                pivot_found = True
+                break
+        
+        if not pivot_found:
+            continue
+        
+        # Eliminate column
+        for row in range(num_lights):
+            if row != pivot_row and augmented[row, col] == 1:
+                # XOR rows (addition in GF(2))
+                augmented[row] ^= augmented[pivot_row]
+        
+        pivot_row += 1
+    
+    if debug:
+        print("After Gaussian elimination:")
+        print(augmented)
+    
+    # Check for inconsistency
+    for row in range(pivot_row, num_lights):
+        if augmented[row, num_buttons] == 1:
+            return -1  # No solution
+    
+    # Find pivot columns (basic variables)
+    pivot_cols = []
+    for row in range(min(pivot_row, num_buttons)):
+        for col in range(num_buttons):
+            if augmented[row, col] == 1:
+                pivot_cols.append(col)
+                break
+    
+    # Free variables are non-pivot columns
+    free_vars = [col for col in range(num_buttons) if col not in pivot_cols]
+    
+    if debug:
+        print(f"Pivot columns (basic variables): {pivot_cols}")
+        print(f"Free variables: {free_vars}")
+    
+    # If no free variables, we have a unique solution
+    if not free_vars:
+        solution = np.zeros(num_buttons, dtype=int)
+        for row in range(len(pivot_cols) - 1, -1, -1):
+            pivot_col = pivot_cols[row]
+            val = augmented[row, num_buttons]
+            for col in range(pivot_col + 1, num_buttons):
+                val ^= augmented[row, col] * solution[col]
+            solution[pivot_col] = val
+        
+        if debug:
+            print(f"Unique solution: {solution}")
+        return sum(solution)
+    
+    # Multiple solutions exist - find minimum weight solution
+    min_weight = float('inf')
+    best_solution = None
+    
+    # Try all combinations of free variables (2^|free_vars|)
+    for free_combo in range(2 ** len(free_vars)):
+        solution = np.zeros(num_buttons, dtype=int)
+        
+        # Set free variables according to current combination
+        for i, free_var in enumerate(free_vars):
+            solution[free_var] = (free_combo >> i) & 1
+        
+        # Back substitute to find basic variables
+        for row in range(len(pivot_cols) - 1, -1, -1):
+            pivot_col = pivot_cols[row]
+            val = augmented[row, num_buttons]
+            for col in range(pivot_col + 1, num_buttons):
+                val ^= augmented[row, col] * solution[col]
+            solution[pivot_col] = val
+        
+        # Check weight of this solution
+        weight = sum(solution)
+        if weight < min_weight:
+            min_weight = weight
+            best_solution = solution.copy()
+    
+    if debug:
+        print(f"Minimum weight solution: {best_solution} (weight: {min_weight})")
+    
+    return min_weight
+
+
 def solve_gf2_system(target: List[int], buttons: List[List[int]]) -> int:
     """
     Solve the system of linear equations over GF(2) to find minimum button presses.
@@ -98,7 +223,7 @@ def parse_input(filename: str) -> List[str]:
         return [line.strip() for line in f if line.strip() and not line.startswith('#')]
 
 
-def part1(data: List[str], debug: bool = False) -> int:
+def part1(data: List[str], debug: bool = False, use_gaussian: bool = False) -> int:
     """
     Solve part 1: Find minimum button presses for all machines.
     
@@ -114,7 +239,10 @@ def part1(data: List[str], debug: bool = False) -> int:
     for i, line in enumerate(data):
         try:
             target_state, buttons = parse_machine(line)
-            min_presses = solve_gf2_system(target_state, buttons)
+            if use_gaussian:
+                min_presses = solve_gf2_gaussian(target_state, buttons, debug)
+            else:
+                min_presses = solve_gf2_system(target_state, buttons)
             
             if min_presses == -1:
                 if debug:
@@ -157,10 +285,12 @@ def main():
     
     parser = argparse.ArgumentParser(description="Day 10: Factory - Configure indicator lights using minimum button presses")
     parser.add_argument("input_file", help="Path to input file")
-    parser.add_argument("part", type=int, nargs="?", default=1, 
-                        choices=[1, 2], help="Puzzle part (1 or 2, default: 1)")
+    parser.add_argument("--part2", action="store_true",
+                        help="Solve part 2 instead of part 1")
     parser.add_argument("-d", "--debug", action="store_true", 
                         help="Print debug information")
+    parser.add_argument("-g", "--gaussian", action="store_true",
+                        help="Use Gaussian elimination instead of brute force")
     
     args = parser.parse_args()
     
@@ -173,12 +303,12 @@ def main():
         print(f"Error reading input file: {e}")
         sys.exit(1)
     
-    if args.part == 1:
-        result = part1(data, debug=args.debug)
-        print(f"Part 1: {result}")
-    else:
+    if args.part2:
         result = part2(data, debug=args.debug)
         print(f"Part 2: {result}")
+    else:
+        result = part1(data, debug=args.debug, use_gaussian=args.gaussian)
+        print(f"Part 1: {result}")
 
 
 if __name__ == "__main__":
