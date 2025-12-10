@@ -16,6 +16,7 @@ day06/          - Day 6: Trash Compactor - Solve cephalopod math worksheets with
 day07/          - Day 7: Laboratories - Simulate tachyon beam splitting through manifold
 day08/          - Day 8: Playground - Connect junction boxes using minimum spanning tree algorithm
 day09/          - Day 9: Movie Theater - Find largest rectangle between red tiles
+day10/          - Day 10: Factory - Configure indicator lights using minimum button presses
 ...
 ```
 
